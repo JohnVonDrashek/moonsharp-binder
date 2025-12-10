@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    
+    <!-- NuGet Package Metadata -->
+    <PackageId>MoonSharpBinder</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Your Name</Authors>
+    <Description>Source generator that creates strongly-typed C# bindings from Lua scripts for MoonSharp. Define once in Lua, get full IntelliSense in C#.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>moonsharp;lua;source-generator;code-generation;bindings</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    
+    <!-- Suppress false positive warnings for analyzer packages -->
+    <NoWarn>$(NoWarn);NU5128;NU5017</NoWarn>
+    
+    <!-- Analyzer Configuration -->
+    <DevelopmentDependency>true</DevelopmentDependency>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.7.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
+  </ItemGroup>
+  
+  <!-- Include analyzer DLL in package -->
+  <Target Name="IncludeAnalyzer" BeforeTargets="_GetPackageFiles">
+    <PropertyGroup>
+      <_AnalyzerDll Condition="'$(TargetPath)' != ''">$(TargetPath)</_AnalyzerDll>
+      <_AnalyzerDll Condition="'$(_AnalyzerDll)' == ''">$(MSBuildProjectDirectory)/bin/$(Configuration)/$(TargetFramework)/$(AssemblyName).dll</_AnalyzerDll>
+    </PropertyGroup>
+    <ItemGroup>
+      <None Include="$(_AnalyzerDll)" Pack="true" PackagePath="analyzers/dotnet/cs" Condition="Exists('$(_AnalyzerDll)')" />
+    </ItemGroup>
+  </Target>
+  
+  <!-- Include README in package -->
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>
+
+
+

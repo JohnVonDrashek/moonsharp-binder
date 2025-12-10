@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.userprefs
+*.log
+*.DS_Store
+*.ncrunch*
+*.DotSettings.user
+*.sln.ide/
+_ReSharper*/
+*.resharper
+TestResult*
+
