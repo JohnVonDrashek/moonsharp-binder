@@ -35,7 +35,7 @@ jobs:
       run: dotnet build MoonSharpBinder.sln -c Release --no-restore
 
     - name: Pack
-      run: dotnet pack src/MoonSharpBinder/MoonSharpBinder.csproj -c Release --no-build -o artifacts /p:PackageVersion=${{ steps.version.outputs.nuget }} /p:IncludeSymbols=true /p:SymbolPackageFormat=snupkg
+      run: dotnet pack src/MoonSharpBinder/MoonSharpBinder.csproj -c Release -o artifacts /p:PackageVersion=${{ steps.version.outputs.nuget }} /p:IncludeSymbols=true /p:SymbolPackageFormat=snupkg
 
     - name: Publish to NuGet
       env:
