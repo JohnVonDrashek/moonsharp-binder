@@ -1,5 +1,7 @@
 # MoonSharp Binder
 
+![MoonSharp Binder](src/MoonSharpBinder/icon.png)
+
 A Roslyn source generator that creates strongly-typed C# bindings from Lua scripts for MoonSharp. **Define once in Lua, get full IntelliSense in C#.**
 
 > Part of [csharp-forge](../AGENTS.md) - experimental C# projects and potential NuGet packages.
