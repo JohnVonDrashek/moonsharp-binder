@@ -6,6 +6,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);PackAnalyzer</TargetsForTfmSpecificBuildOutput>
     
     <!-- NuGet Package Metadata -->
     <PackageId>MoonSharpBinder</PackageId>
@@ -15,6 +16,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>moonsharp;lua;source-generator;code-generation;bindings</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <RepositoryUrl>https://github.com/JohnVonDrashek/moonsharp-binder</RepositoryUrl>
@@ -33,19 +35,17 @@
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
   </ItemGroup>
   
-  <!-- Include analyzer DLL in package -->
-  <Target Name="IncludeAnalyzer" BeforeTargets="_GetPackageFiles">
-    <PropertyGroup>
-      <_AnalyzerDll Condition="'$(TargetPath)' != ''">$(TargetPath)</_AnalyzerDll>
-      <_AnalyzerDll Condition="'$(_AnalyzerDll)' == ''">$(MSBuildProjectDirectory)/bin/$(Configuration)/$(TargetFramework)/$(AssemblyName).dll</_AnalyzerDll>
-    </PropertyGroup>
+  <!-- Pack analyzer output (dll/pdb) -->
+  <Target Name="PackAnalyzer" DependsOnTargets="Build">
     <ItemGroup>
-      <None Include="$(_AnalyzerDll)" Pack="true" PackagePath="analyzers/dotnet/cs" Condition="Exists('$(_AnalyzerDll)')" />
+      <TfmSpecificPackageFile Include="$(TargetPath)" PackagePath="analyzers/dotnet/cs" />
+      <TfmSpecificPackageFile Include="$(TargetDir)$(AssemblyName).pdb" PackagePath="analyzers/dotnet/cs" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
     </ItemGroup>
   </Target>
   
   <!-- Include README in package -->
   <ItemGroup>
+    <None Include="icon.png" Pack="true" PackagePath="\" />
     <None Include="../../README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>
