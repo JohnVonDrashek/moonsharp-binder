@@ -1,0 +1,59 @@
+name: Publish to NuGet (main)
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Compute package version
+      id: version
+      run: |
+        BASE=$(grep -oP '(?<=<Version>).*?(?=</Version>)' src/MoonSharpBinder/MoonSharpBinder.csproj)
+        echo "Using base version: $BASE"
+        echo "nuget=${BASE}-ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore
+      run: dotnet restore MoonSharpBinder.sln
+
+    - name: Build
+      run: dotnet build MoonSharpBinder.sln -c Release --no-restore
+
+    - name: Pack
+      run: dotnet pack src/MoonSharpBinder/MoonSharpBinder.csproj \
+        -c Release --no-build -o artifacts \
+        /p:PackageVersion=${{ steps.version.outputs.nuget }} \
+        /p:IncludeSymbols=true /p:SymbolPackageFormat=snupkg
+
+    - name: Publish to NuGet
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      run: |
+        if [ -z "$NUGET_API_KEY" ]; then
+          echo "NUGET_API_KEY is not set"; exit 1; fi
+        dotnet nuget push "artifacts/*.nupkg" \
+          --api-key "$NUGET_API_KEY" \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+        if ls artifacts/*.snupkg 1> /dev/null 2>&1; then
+          dotnet nuget push "artifacts/*.snupkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+        fi
+
