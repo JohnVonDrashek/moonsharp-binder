@@ -1,5 +1,9 @@
 # MoonSharp Binder
 
+![NuGet](https://img.shields.io/nuget/v/MoonSharpBinder?logo=nuget)
+![License](https://img.shields.io/github/license/JohnVonDrashek/moonsharp-binder)
+![.NET](https://img.shields.io/badge/.NET-Standard%202.0-blue)
+
 ![MoonSharp Binder](src/MoonSharpBinder/icon.png)
 
 A Roslyn source generator that creates strongly-typed C# bindings from Lua scripts for MoonSharp. **Define once in Lua, get full IntelliSense in C#.**
