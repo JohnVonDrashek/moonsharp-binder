@@ -214,6 +214,26 @@ public partial class GameScript
 }
 ```
 
+### Nested Tables
+
+Deeply nested tables produce nested wrapper classes so you get typed access all the way down:
+
+```lua
+player = {
+    stats = {
+        hp = 100,
+        meta = { title = "hero" }
+    }
+}
+```
+
+Generates accessors like:
+
+```csharp
+lua.Player.Stats.Hp = 90;
+var title = lua.Player.Stats.Meta.Title;
+```
+
 ## Naming Conventions
 
 - Lua `snake_case` → C# `PascalCase`
@@ -280,6 +300,8 @@ public partial class GameScript
 1. Ensure Lua files are added as `<AdditionalFiles>` not `<Content>` or `<None>`
 2. Rebuild the project (generators run on build)
 3. Check the `obj/` folder for `.g.cs` files
+
+If a Lua file fails to parse, the generator emits `MSHB002` warnings with the error details.
 
 ### Wrong namespace?
 

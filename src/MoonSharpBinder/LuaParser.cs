@@ -21,6 +21,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace MoonSharpBinder;
@@ -729,35 +730,8 @@ public static class LuaParser
     /// </remarks>
     private static List<LuaTableField> ParseTableFields(string valueStr, string[] lines, int startLine)
     {
-        var fields = new List<LuaTableField>();
-        
-        // Build the complete table content string (may span multiple lines)
         var tableContent = ExtractTableContent(valueStr, lines, startLine);
-        
-        // Match field assignments: name = value
-        var fieldPattern = new Regex(@"(?<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?<value>[^,}]+)");
-        
-        foreach (Match match in fieldPattern.Matches(tableContent))
-        {
-            var fieldName = match.Groups["name"].Value;
-            var fieldValue = match.Groups["value"].Value.Trim();
-            
-            var field = new LuaTableField
-            {
-                Name = fieldName,
-                ValueType = InferValueType(fieldValue)
-            };
-            
-            // Recursively parse nested table fields
-            if (field.ValueType == LuaValueType.Table)
-            {
-                field.NestedFields = ParseNestedTable(fieldValue);
-            }
-            
-            fields.Add(field);
-        }
-        
-        return fields;
+        return ParseFields(tableContent);
     }
 
     /// <summary>
@@ -797,7 +771,11 @@ public static class LuaParser
                 {
                     braceCount++;
                     started = true;
-                    continue; // Don't include the opening brace
+                    if (braceCount > 1)
+                    {
+                        content.Append(ch); // Keep nested braces for deeper tables
+                    }
+                    continue;
                 }
                 if (ch == '}')
                 {
@@ -806,7 +784,11 @@ public static class LuaParser
                     {
                         return content.ToString();
                     }
-                    continue; // Don't include intermediate closing braces at depth 0
+                    if (braceCount >= 1)
+                    {
+                        content.Append(ch); // Preserve inner closing braces
+                    }
+                    continue;
                 }
                 if (started && braceCount > 0)
                 {
@@ -828,36 +810,98 @@ public static class LuaParser
     /// </summary>
     /// <param name="tableStr">A string containing a table literal (including braces).</param>
     /// <returns>A list of <see cref="LuaTableField"/> for the nested table's fields.</returns>
-    /// <remarks>
-    /// Used for one level of table nesting. Deeper nesting is supported but
-    /// nested fields won't be recursively parsed beyond this level.
-    /// </remarks>
     private static List<LuaTableField> ParseNestedTable(string tableStr)
     {
+        var content = TrimOuterBraces(tableStr);
+        return ParseFields(content);
+    }
+
+    /// <summary>
+    /// Parses table fields from a content string (without the outer braces).
+    /// Handles nested tables by tracking brace depth to avoid splitting on commas inside nested braces.
+    /// </summary>
+    private static List<LuaTableField> ParseFields(string content)
+    {
         var fields = new List<LuaTableField>();
-        
-        // Extract content between braces
-        var start = tableStr.IndexOf('{');
-        var end = tableStr.LastIndexOf('}');
-        if (start < 0 || end <= start) return fields;
-        
-        var content = tableStr.Substring(start + 1, end - start - 1);
-        
-        // Match field assignments
-        var fieldPattern = new Regex(@"(?<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?<value>[^,}]+)");
-        
-        foreach (Match match in fieldPattern.Matches(content))
+
+        foreach (var segment in SplitTopLevelFields(content))
         {
-            var fieldName = match.Groups["name"].Value;
-            var fieldValue = match.Groups["value"].Value.Trim();
-            
-            fields.Add(new LuaTableField
+            var eqIndex = segment.IndexOf('=');
+            if (eqIndex <= 0) continue;
+
+            var fieldName = segment.Substring(0, eqIndex).Trim();
+            var fieldValue = segment.Substring(eqIndex + 1).Trim();
+            if (string.IsNullOrEmpty(fieldName)) continue;
+
+            var valueType = InferValueType(fieldValue);
+            if (valueType == LuaValueType.Unknown && fieldValue.Contains("{"))
+            {
+                valueType = LuaValueType.Table;
+            }
+
+            var field = new LuaTableField
             {
                 Name = fieldName,
-                ValueType = InferValueType(fieldValue)
-            });
+                ValueType = valueType
+            };
+
+            if (valueType == LuaValueType.Table)
+            {
+                field.NestedFields = ParseNestedTable(fieldValue);
+            }
+
+            fields.Add(field);
         }
-        
+
         return fields;
+    }
+
+    /// <summary>
+    /// Splits a table content string into top-level field assignment segments, respecting nested brace depth.
+    /// </summary>
+    private static List<string> SplitTopLevelFields(string content)
+    {
+        var segments = new List<string>();
+        var current = new StringBuilder();
+        var depth = 0;
+
+        foreach (var ch in content)
+        {
+            if (ch == '{') depth++;
+            if (ch == '}') depth = Math.Max(0, depth - 1);
+
+            if (ch == ',' && depth == 0)
+            {
+                var segment = current.ToString().Trim();
+                if (segment.Length > 0)
+                {
+                    segments.Add(segment);
+                }
+                current.Clear();
+                continue;
+            }
+
+            current.Append(ch);
+        }
+
+        var last = current.ToString().Trim();
+        if (last.Length > 0)
+        {
+            segments.Add(last);
+        }
+
+        return segments;
+    }
+
+    /// <summary>
+    /// Removes the outermost braces from a table literal string, returning the inner content.
+    /// </summary>
+    private static string TrimOuterBraces(string tableStr)
+    {
+        var start = tableStr.IndexOf('{');
+        var end = tableStr.LastIndexOf('}');
+        if (start < 0 || end <= start) return tableStr;
+
+        return tableStr.Substring(start + 1, end - start - 1);
     }
 }

@@ -190,6 +190,14 @@ public class MoonSharpBinderGenerator : ISourceGenerator
                     var fileName = System.IO.Path.GetFileNameWithoutExtension(luaFile.Path);
                     var parseResult = LuaParser.Parse(luaContent!, fileName);
 
+                    // Surface parse errors as diagnostics
+                    foreach (var error in parseResult.Errors)
+                    {
+                        ReportDiagnostic(context, "MSHB002", "Lua parse warning",
+                            $"Error parsing {luaFile.Path}: {error}",
+                            DiagnosticSeverity.Warning);
+                    }
+
                     // Only generate a binding class if there are exposed items
                     if (parseResult.Functions.Any() || parseResult.Globals.Any())
                     {
@@ -559,6 +567,17 @@ public class MoonSharpBinderGenerator : ISourceGenerator
         sb.AppendLine("    {");
         sb.AppendLine("        private readonly Table _table;");
         sb.AppendLine();
+
+        // Cache nested tables for reuse
+        foreach (var tableField in global.TableFields.Where(f => f.ValueType == LuaValueType.Table))
+        {
+            var fieldPropertyName = ToPascalCase(tableField.Name);
+            sb.AppendLine($"        private {fieldPropertyName}Table? _cached{fieldPropertyName}Table;");
+        }
+        if (global.TableFields.Any(f => f.ValueType == LuaValueType.Table))
+        {
+            sb.AppendLine();
+        }
         
         // Internal constructor (only the parent class should instantiate)
         sb.AppendLine($"        internal {tableClassName}(Table table)");
@@ -571,16 +590,41 @@ public class MoonSharpBinderGenerator : ISourceGenerator
         foreach (var field in global.TableFields)
         {
             var fieldPropertyName = ToPascalCase(field.Name);
-            var fieldCsType = MapValueType(field.ValueType, field.ExplicitType);
 
-            sb.AppendLine($"        /// <summary>");
-            sb.AppendLine($"        /// Gets or sets the '{field.Name}' field");
-            sb.AppendLine($"        /// </summary>");
-            sb.AppendLine($"        public {fieldCsType} {fieldPropertyName}");
-            sb.AppendLine("        {");
-            sb.AppendLine($"            get => {GenerateTableGetterConversion(field.ValueType, field.Name)};");
-            sb.AppendLine($"            set => _table[\"{field.Name}\"] = {GenerateSetterConversion(field.ValueType, "value")};");
-            sb.AppendLine("        }");
+            if (field.ValueType == LuaValueType.Table)
+            {
+                var nestedClassName = $"{fieldPropertyName}Table";
+                sb.AppendLine($"        /// <summary>");
+                sb.AppendLine($"        /// Access the nested table '{field.Name}'");
+                sb.AppendLine($"        /// </summary>");
+                sb.AppendLine($"        public {nestedClassName} {fieldPropertyName}");
+                sb.AppendLine("        {");
+                sb.AppendLine("            get");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                if (_cached{fieldPropertyName}Table == null)");
+                sb.AppendLine("                {");
+                sb.AppendLine($"                    var tableValue = _table.Get(\"{field.Name}\");");
+                sb.AppendLine($"                    if (tableValue.Type != DataType.Table)");
+                sb.AppendLine($"                        throw new InvalidOperationException(\"Lua field '{field.Name}' is not a table\");");
+                sb.AppendLine($"                    _cached{fieldPropertyName}Table = new {nestedClassName}(tableValue.Table);");
+                sb.AppendLine("                }");
+                sb.AppendLine($"                return _cached{fieldPropertyName}Table;");
+                sb.AppendLine("            }");
+                sb.AppendLine("        }");
+            }
+            else
+            {
+                var fieldCsType = MapValueType(field.ValueType, field.ExplicitType);
+                sb.AppendLine($"        /// <summary>");
+                sb.AppendLine($"        /// Gets or sets the '{field.Name}' field");
+                sb.AppendLine($"        /// </summary>");
+                sb.AppendLine($"        public {fieldCsType} {fieldPropertyName}");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            get => {GenerateTableGetterConversion(field.ValueType, field.Name)};");
+                sb.AppendLine($"            set => _table[\"{field.Name}\"] = {GenerateSetterConversion(field.ValueType, "value")};");
+                sb.AppendLine("        }");
+            }
+
             sb.AppendLine();
         }
 
@@ -589,8 +633,103 @@ public class MoonSharpBinderGenerator : ISourceGenerator
         sb.AppendLine("        /// Gets the underlying MoonSharp Table for advanced access");
         sb.AppendLine("        /// </summary>");
         sb.AppendLine("        public Table RawTable => _table;");
+        sb.AppendLine();
+
+        // Generate nested wrapper classes for table fields
+        foreach (var tableField in global.TableFields.Where(f => f.ValueType == LuaValueType.Table))
+        {
+            GenerateNestedTableClass(sb, tableField, "        ");
+        }
         
         sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Generates a nested table wrapper class for a table field, including deeper nested fields.
+    /// </summary>
+    private void GenerateNestedTableClass(StringBuilder sb, LuaTableField field, string indent)
+    {
+        var className = $"{ToPascalCase(field.Name)}Table";
+        var deeperTables = field.NestedFields.Where(f => f.ValueType == LuaValueType.Table).ToList();
+
+        sb.AppendLine($"{indent}/// <summary>");
+        sb.AppendLine($"{indent}/// Wrapper for nested table '{field.Name}'");
+        sb.AppendLine($"{indent}/// </summary>");
+        sb.AppendLine($"{indent}public class {className}");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{indent}    private readonly Table _table;");
+        sb.AppendLine();
+
+        foreach (var nestedTable in deeperTables)
+        {
+            var nestedName = ToPascalCase(nestedTable.Name);
+            sb.AppendLine($"{indent}    private {nestedName}Table? _cached{nestedName}Table;");
+        }
+        if (deeperTables.Any())
+        {
+            sb.AppendLine();
+        }
+
+        sb.AppendLine($"{indent}    internal {className}(Table table)");
+        sb.AppendLine($"{indent}    {{");
+        sb.AppendLine($"{indent}        _table = table ?? throw new ArgumentNullException(nameof(table));");
+        sb.AppendLine($"{indent}    }}");
+        sb.AppendLine();
+
+        foreach (var nestedField in field.NestedFields)
+        {
+            var propertyName = ToPascalCase(nestedField.Name);
+
+            if (nestedField.ValueType == LuaValueType.Table)
+            {
+                var nestedClassName = $"{propertyName}Table";
+                sb.AppendLine($"{indent}    /// <summary>");
+                sb.AppendLine($"{indent}    /// Access the nested table '{nestedField.Name}'");
+                sb.AppendLine($"{indent}    /// </summary>");
+                sb.AppendLine($"{indent}    public {nestedClassName} {propertyName}");
+                sb.AppendLine($"{indent}    {{");
+                sb.AppendLine($"{indent}        get");
+                sb.AppendLine($"{indent}        {{");
+                sb.AppendLine($"{indent}            if (_cached{propertyName}Table == null)");
+                sb.AppendLine($"{indent}            {{");
+                sb.AppendLine($"{indent}                var tableValue = _table.Get(\"{nestedField.Name}\");");
+                sb.AppendLine($"{indent}                if (tableValue.Type != DataType.Table)");
+                sb.AppendLine($"{indent}                    throw new InvalidOperationException(\"Lua field '{nestedField.Name}' is not a table\");");
+                sb.AppendLine($"{indent}                _cached{propertyName}Table = new {nestedClassName}(tableValue.Table);");
+                sb.AppendLine($"{indent}            }}");
+                sb.AppendLine($"{indent}            return _cached{propertyName}Table;");
+                sb.AppendLine($"{indent}        }}");
+                sb.AppendLine($"{indent}    }}");
+            }
+            else
+            {
+                var fieldCsType = MapValueType(nestedField.ValueType, nestedField.ExplicitType);
+                sb.AppendLine($"{indent}    /// <summary>");
+                sb.AppendLine($"{indent}    /// Gets or sets the '{nestedField.Name}' field");
+                sb.AppendLine($"{indent}    /// </summary>");
+                sb.AppendLine($"{indent}    public {fieldCsType} {propertyName}");
+                sb.AppendLine($"{indent}    {{");
+                sb.AppendLine($"{indent}        get => {GenerateTableGetterConversion(nestedField.ValueType, nestedField.Name)};");
+                sb.AppendLine($"{indent}        set => _table[\"{nestedField.Name}\"] = {GenerateSetterConversion(nestedField.ValueType, "value")};");
+                sb.AppendLine($"{indent}    }}");
+            }
+
+            sb.AppendLine();
+        }
+
+        sb.AppendLine($"{indent}    /// <summary>");
+        sb.AppendLine($"{indent}    /// Gets the underlying MoonSharp Table for advanced access");
+        sb.AppendLine($"{indent}    /// </summary>");
+        sb.AppendLine($"{indent}    public Table RawTable => _table;");
+        sb.AppendLine();
+
+        foreach (var deeper in deeperTables)
+        {
+            GenerateNestedTableClass(sb, deeper, indent + "    ");
+        }
+
+        sb.AppendLine($"{indent}}}");
         sb.AppendLine();
     }
 
@@ -629,6 +768,7 @@ public class MoonSharpBinderGenerator : ISourceGenerator
             LuaValueType.Number => "double",
             LuaValueType.String => "string",
             LuaValueType.Boolean => "bool",
+            LuaValueType.Table => "Table",
             LuaValueType.Nil => "DynValue",
             _ => "DynValue"
         };
