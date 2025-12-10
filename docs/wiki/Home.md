@@ -12,13 +12,13 @@ What you’ll find here
 
 Suggested reading order
 -----------------------
-1. [Quickstart](Quickstart.md)
-2. [Installation & Project Setup](Installation.md)
-3. [Configuration](Configuration.md)
-4. [Lua Authoring Guide](LuaAuthoringGuide.md)
-5. [Generated Code Reference](GeneratedCodeReference.md)
-6. [C# Usage Patterns](CSharpUsage.md)
-7. [Advanced Scenarios](AdvancedScenarios.md)
-8. [Troubleshooting & FAQ](TroubleshootingFAQ.md)
-9. [Examples & Cookbook](ExamplesCookbook.md)
+1. [Quickstart](Quickstart)
+2. [Installation & Project Setup](Installation)
+3. [Configuration](Configuration)
+4. [Lua Authoring Guide](LuaAuthoringGuide)
+5. [Generated Code Reference](GeneratedCodeReference)
+6. [C# Usage Patterns](CSharpUsage)
+7. [Advanced Scenarios](AdvancedScenarios)
+8. [Troubleshooting & FAQ](TroubleshootingFAQ)
+9. [Examples & Cookbook](ExamplesCookbook)
 

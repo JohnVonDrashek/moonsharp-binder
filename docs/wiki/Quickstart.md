@@ -59,6 +59,6 @@ lua.Sprite.X = 500;
 
 Next steps
 ----------
-- Review [Configuration](Configuration.md) for more options.
-- Check [Lua Authoring Guide](LuaAuthoringGuide.md) for annotations and conventions.
+- Review [Configuration](Configuration) for more options.
+- Check [Lua Authoring Guide](LuaAuthoringGuide) for annotations and conventions.
 
