@@ -24,12 +24,13 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git clone "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.wiki.git" wiki
-        rsync -av --delete docs/wiki/ wiki/
+        rsync -av --delete --exclude '.git' docs/wiki/ wiki/
         cd wiki
+        DEFAULT_BRANCH="$(git symbolic-ref --short HEAD)"
         if git status --porcelain | grep .; then
           git add .
           git commit -m "Sync wiki from docs/wiki (CI)"
-          git push origin master
+          git push origin "${DEFAULT_BRANCH}"
         else
           echo "No wiki changes to sync"
         fi
