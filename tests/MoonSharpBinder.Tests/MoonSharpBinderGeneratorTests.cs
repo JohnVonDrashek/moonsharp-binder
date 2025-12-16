@@ -376,6 +376,156 @@ public class MoonSharpBinderGeneratorTests
         generated.Should().Contain("public string Title");
     }
 
+    [Fact]
+    public void GeneratesValidCodeForMultipleTablesWithSharedFieldNames()
+    {
+        // This reproduces GitHub issue #1: "Duplicate property generation with nested Lua tables sharing field names"
+        // When multiple top-level tables have nested tables with the same field names,
+        // the generated code should compile without CS0102 errors (duplicate member definitions)
+        const string lua = """
+        game_config = {
+            player = {
+                max_health = 100,
+                base_speed = 200
+            },
+            combat = {
+                attack_cooldown = 0.5
+            }
+        }
+
+        enemies = {
+            slime = {
+                health = 20,
+                damage = 5,
+                speed = 50
+            },
+            skeleton = {
+                health = 40,
+                damage = 10,
+                speed = 80
+            }
+        }
+        """;
+
+        var runResult = RunGenerator(new AdditionalText[]
+        {
+            new LuaAdditionalText("Content/scripts/config.lua", lua)
+        });
+
+        var generated = GetGeneratedSource(runResult, "ConfigScript.g.cs");
+
+        // Verify the code structure is correct - each top-level table should have its own class
+        generated.Should().Contain("public GameConfigTable GameConfig");
+        generated.Should().Contain("public EnemiesTable Enemies");
+
+        // Verify nested tables within game_config
+        generated.Should().Contain("public PlayerTable Player");
+        generated.Should().Contain("public CombatTable Combat");
+
+        // Verify nested tables within enemies
+        generated.Should().Contain("public SlimeTable Slime");
+        generated.Should().Contain("public SkeletonTable Skeleton");
+
+        // Most importantly: the generated code should compile without errors
+        var compilation = CreateCompilationWithMoonSharp(generated);
+        var diagnostics = compilation.GetDiagnostics();
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+
+        errors.Should().BeEmpty(
+            "Generated code should compile without errors. Found: {0}",
+            string.Join(Environment.NewLine, errors.Select(e => e.GetMessage())));
+    }
+
+    [Fact]
+    public void GeneratesValidCodeForSameFieldNamesAtDifferentNestingLevels()
+    {
+        // Test case where the same field name appears at different nesting levels
+        const string lua = """
+        data = {
+            x = 10,
+            inner = {
+                x = 20,
+                deeper = {
+                    x = 30
+                }
+            }
+        }
+        """;
+
+        var runResult = RunGenerator(new AdditionalText[]
+        {
+            new LuaAdditionalText("Content/scripts/nested.lua", lua)
+        });
+
+        var generated = GetGeneratedSource(runResult, "NestedScript.g.cs");
+
+        // Each nested level should have its own X property in its own class
+        generated.Should().Contain("public DataTable Data");
+        generated.Should().Contain("public InnerTable Inner");
+        generated.Should().Contain("public DeeperTable Deeper");
+
+        // Verify the code compiles
+        var compilation = CreateCompilationWithMoonSharp(generated);
+        var diagnostics = compilation.GetDiagnostics();
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+
+        errors.Should().BeEmpty(
+            "Generated code should compile without errors. Found: {0}",
+            string.Join(Environment.NewLine, errors.Select(e => e.GetMessage())));
+    }
+
+    private static CSharpCompilation CreateCompilationWithMoonSharp(string generatedSource)
+    {
+        // Create a mock MoonSharp.Interpreter namespace with the required types
+        const string moonSharpStubs = """
+        namespace MoonSharp.Interpreter
+        {
+            public class Script
+            {
+                public Table Globals { get; } = new Table();
+            }
+
+            public class Table
+            {
+                public DynValue Get(string key) => new DynValue();
+                public object this[string key] { get => null!; set { } }
+            }
+
+            public class DynValue
+            {
+                public DataType Type { get; set; }
+                public double Number { get; set; }
+                public string String { get; set; } = "";
+                public bool Boolean { get; set; }
+                public Table Table { get; set; } = new Table();
+                public static DynValue NewBoolean(bool value) => new DynValue();
+                public static DynValue FromObject(Script script, object obj) => new DynValue();
+            }
+
+            public enum DataType { Nil, Boolean, Number, String, Function, Table }
+        }
+        """;
+
+        var syntaxTrees = new[]
+        {
+            CSharpSyntaxTree.ParseText(moonSharpStubs),
+            CSharpSyntaxTree.ParseText(generatedSource)
+        };
+
+        var references = new[]
+        {
+            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(Enumerable).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(List<>).Assembly.Location)
+        };
+
+        return CSharpCompilation.Create(
+            assemblyName: "TestCompilation",
+            syntaxTrees: syntaxTrees,
+            references: references,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+    }
+
     private static GeneratorDriverRunResult RunGenerator(IEnumerable<AdditionalText> additionalTexts, IDictionary<string, string>? globalOptions = null)
     {
         var references = new[]

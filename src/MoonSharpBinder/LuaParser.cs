@@ -457,7 +457,7 @@ public static class LuaParser
             {
                 var line = lines[i];
                 var trimmedLine = line.TrimStart();
-                
+
                 // Handle multi-line comments: --[[ ... ]]
                 if (trimmedLine.StartsWith("--[["))
                 {
@@ -471,7 +471,11 @@ public static class LuaParser
                     }
                     continue;
                 }
-                
+
+                // Capture brace depth BEFORE processing this line
+                // This tells us if we're already inside a table literal
+                var braceDepthAtLineStart = braceDepth;
+
                 // Count braces to track table literal depth
                 // This prevents us from treating table field assignments as global assignments
                 foreach (var ch in line)
@@ -479,10 +483,11 @@ public static class LuaParser
                     if (ch == '{') braceDepth++;
                     if (ch == '}') braceDepth--;
                 }
-                
-                // Skip lines that are inside table literals (except the line that starts the table)
-                var startsTable = trimmedLine.Contains("= {") || trimmedLine.Contains("={");
-                if (braceDepth > 0 && !startsTable)
+
+                // Skip lines that are inside table literals
+                // We use braceDepthAtLineStart to correctly skip nested table assignments
+                // like "player = { ... }" when they appear inside another table
+                if (braceDepthAtLineStart > 0)
                 {
                     continue;
                 }
@@ -753,18 +758,21 @@ public static class LuaParser
             var end = valueStr.LastIndexOf('}');
             if (start >= 0 && end > start)
             {
-                return valueStr.Substring(start + 1, end - start - 1);
+                var content = valueStr.Substring(start + 1, end - start - 1);
+                return StripLuaComments(content);
             }
         }
-        
+
         // Multi-line table: collect content until matching closing brace
-        var content = new System.Text.StringBuilder();
+        var result = new System.Text.StringBuilder();
         var braceCount = 0;
         var started = false;
-        
+
         for (int i = startLine; i < lines.Length; i++)
         {
-            var line = lines[i];
+            // Strip single-line comments from this line before processing
+            var line = StripLuaComments(lines[i]);
+
             foreach (var ch in line)
             {
                 if (ch == '{')
@@ -773,7 +781,7 @@ public static class LuaParser
                     started = true;
                     if (braceCount > 1)
                     {
-                        content.Append(ch); // Keep nested braces for deeper tables
+                        result.Append(ch); // Keep nested braces for deeper tables
                     }
                     continue;
                 }
@@ -782,27 +790,70 @@ public static class LuaParser
                     braceCount--;
                     if (braceCount == 0 && started)
                     {
-                        return content.ToString();
+                        return result.ToString();
                     }
                     if (braceCount >= 1)
                     {
-                        content.Append(ch); // Preserve inner closing braces
+                        result.Append(ch); // Preserve inner closing braces
                     }
                     continue;
                 }
                 if (started && braceCount > 0)
                 {
-                    content.Append(ch);
+                    result.Append(ch);
                 }
             }
             // Replace newlines with spaces to normalize multi-line content
             if (started && braceCount > 0)
             {
-                content.Append(' ');
+                result.Append(' ');
             }
         }
-        
-        return content.ToString();
+
+        return result.ToString();
+    }
+
+    /// <summary>
+    /// Strips single-line Lua comments from a string.
+    /// </summary>
+    /// <param name="line">The input line potentially containing comments.</param>
+    /// <returns>The line with any single-line comment removed.</returns>
+    private static string StripLuaComments(string line)
+    {
+        // Find the position of -- that isn't inside a string
+        var inString = false;
+        var stringChar = '\0';
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            var ch = line[i];
+
+            if (inString)
+            {
+                // Check for end of string (handle escape sequences)
+                if (ch == stringChar && (i == 0 || line[i - 1] != '\\'))
+                {
+                    inString = false;
+                }
+            }
+            else
+            {
+                // Check for start of string
+                if (ch == '"' || ch == '\'')
+                {
+                    inString = true;
+                    stringChar = ch;
+                }
+                // Check for comment start (not inside a string)
+                else if (ch == '-' && i + 1 < line.Length && line[i + 1] == '-')
+                {
+                    // Found a comment - return everything before it
+                    return line.Substring(0, i);
+                }
+            }
+        }
+
+        return line;
     }
 
     /// <summary>
