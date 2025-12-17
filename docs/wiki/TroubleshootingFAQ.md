@@ -28,15 +28,23 @@ Type inferred incorrectly
 
 Diagnostics reference
 ---------------------
-| Code | Severity | Description |
-| ---- | -------- | ----------- |
-| `MSHB001` | Warning | Error processing a Lua file (exception during generation) |
-| `MSHB002` | Warning | Lua parse error in a file |
-| `MSHB003` | Info | No .lua files found in AdditionalFiles |
-| `MSHB004` | Warning | Lua files found but none in configured directory |
-| `MSHB005` | Info | Lua file has no exportable members |
-| `MSHB006` | Info | Summary: N binding classes generated from M files |
-| `MSHB999` | Error | Unexpected generator exception |
+All diagnostics use Warning severity so they appear in default build output.
+
+| Code | Description |
+| ---- | ----------- |
+| `MSHB001` | Error processing a Lua file (exception during generation) |
+| `MSHB002` | Lua parse error in a file |
+| `MSHB003` | No .lua files found in AdditionalFiles |
+| `MSHB004` | Lua files found but none in configured directory |
+| `MSHB005` | Lua file has no exportable members (all locals) |
+| `MSHB006` | Success: lists generated types and namespace |
+| `MSHB007` | Processed files but generated no types |
+| `MSHB999` | Unexpected generator exception (Error severity) |
+
+When the generator runs successfully, you'll see output like:
+```
+warning MSHB006: MoonSharpBinder: Generated 1 type(s) in namespace 'GeneratedLua': GameConfigScript
+```
 
 Frequently asked
 ----------------

@@ -185,18 +185,21 @@ public class MoonSharpBinderGenerator : ISourceGenerator
 
             if (allLuaFiles.Count == 0)
             {
+                // Warning: No Lua files at all - likely a configuration issue
                 ReportDiagnostic(context, "MSHB003", "No Lua files found",
                     "MoonSharpBinder: No .lua files found in AdditionalFiles. Add Lua files with <AdditionalFiles Include=\"**/*.lua\" /> in your .csproj.",
-                    DiagnosticSeverity.Info);
+                    DiagnosticSeverity.Warning);
             }
             else if (luaFiles.Count == 0)
             {
+                // Warning: Lua files exist but not in configured directory
                 ReportDiagnostic(context, "MSHB004", "No Lua files in configured directory",
                     $"MoonSharpBinder: Found {allLuaFiles.Count} .lua file(s) in AdditionalFiles, but none match the configured directory '{luaDirectory}'. Check moonsharp_binder.lua_directory setting.",
                     DiagnosticSeverity.Warning);
             }
 
             var generatedCount = 0;
+            var generatedTypes = new List<string>();
 
             // Process each Lua file
             foreach (var luaFile in luaFiles)
@@ -223,15 +226,17 @@ public class MoonSharpBinderGenerator : ISourceGenerator
                     {
                         var generatedCode = GenerateBindingClass(parseResult, namespaceName);
                         var sourceText = SourceText.From(generatedCode, Encoding.UTF8);
-                        var outputName = $"{ToPascalCase(fileName)}Script.g.cs";
+                        var typeName = $"{ToPascalCase(fileName)}Script";
+                        var outputName = $"{typeName}.g.cs";
                         context.AddSource(outputName, sourceText);
                         generatedCount++;
+                        generatedTypes.Add(typeName);
                     }
                     else
                     {
                         ReportDiagnostic(context, "MSHB005", "No exportable members",
                             $"MoonSharpBinder: '{fileName}.lua' has no global functions or variables to export. Only non-local members are generated.",
-                            DiagnosticSeverity.Info);
+                            DiagnosticSeverity.Warning);
                     }
                 }
                 catch (Exception ex)
@@ -243,12 +248,20 @@ public class MoonSharpBinderGenerator : ISourceGenerator
                 }
             }
 
-            // Summary diagnostic
-            if (luaFiles.Count > 0)
+            // Summary diagnostic - use Warning so it appears in default build output
+            if (generatedCount > 0)
             {
-                ReportDiagnostic(context, "MSHB006", "Generation complete",
-                    $"MoonSharpBinder: Generated {generatedCount} binding class(es) from {luaFiles.Count} Lua file(s) into namespace '{namespaceName}'.",
-                    DiagnosticSeverity.Info);
+                var typesList = string.Join(", ", generatedTypes);
+                ReportDiagnostic(context, "MSHB006", "MoonSharpBinder generation complete",
+                    $"MoonSharpBinder: Generated {generatedCount} type(s) in namespace '{namespaceName}': {typesList}",
+                    DiagnosticSeverity.Warning);
+            }
+            else if (luaFiles.Count > 0)
+            {
+                // We processed files but generated nothing
+                ReportDiagnostic(context, "MSHB007", "No types generated",
+                    $"MoonSharpBinder: Processed {luaFiles.Count} Lua file(s) but generated no types. Check that files contain global (non-local) functions or variables.",
+                    DiagnosticSeverity.Warning);
             }
         }
         catch (Exception ex)
